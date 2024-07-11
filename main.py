@@ -1,11 +1,12 @@
 from enum import Enum
 from typing import Optional
+from bson import ObjectId
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from datetime import datetime
 import pymongo
 
-application = FastAPI()
+app = FastAPI()
 
 class Tipe(str, Enum):
     def __str__(self):
@@ -29,24 +30,32 @@ class InputTransaction(BaseModel):
     method:Method
     name:str
 
-client = pymongo.MongoClient("mongodb+srv://yandiriswandi:rinamuyandiku@tutorialcrud.vjx790j.mongodb.net/?retryWrites=true&w=majority&appName=tutorialCrud")
-db = client.get_database("fastapi-tutorial")
-transaction = db.get_collection("transaction")
+# connect to atlas mongodb
+# client = pymongo.MongoClient("mongodb+srv://yandiriswandi:rinamuyandiku@tutorialcrud.ebjbgab.mongodb.net/?retryWrites=true&w=majority&appName=tutorialCrud")
+# db = client.get_database("fastapi-tutorial")
+# transaction = db.get_collection("transaction")
 
-@application.post("/transaction")
+# connect to local database
+client = pymongo.MongoClient("mongodb://localhost:27017/")
+db = client["fastapi_database"]
+transaction = db["transactions"]
+
+#add transaction
+@app.post("/transaction")
 def insert_transaction(input_transaction: InputTransaction):
     transaction_data = input_transaction.model_dump()
     transaction_data['createTime'] = datetime.utcnow()
     result = transaction.insert_one(transaction_data)
     return {"message": "Transaction inserted successfully", "transaction_id": str(result.inserted_id)}
 
-@application.get("/transaction")
+#get transaction
+@app.get("/transaction")
 def get_transaction(tipe: Tipe = None,name: str = None, page: int = Query(1, ge=1), size: int = Query(10, ge=1, le=100)):
     query = {}
     if tipe:
         query['tipe'] = tipe
     if name:
-        query['name'] = name
+        query['name'] = {"$regex": name, "$options": "i"} 
         
     total_items = transaction.count_documents(query)
     result_filter = transaction.find(query).skip((page - 1) * size).limit(size)
@@ -63,3 +72,16 @@ def get_transaction(tipe: Tipe = None,name: str = None, page: int = Query(1, ge=
         "items": result_filter
     }
 
+#update transaction
+@app.put("/transaction/{id}")
+def insert_transaction(id:str,input_transaction: InputTransaction):
+
+    transaction.update_one({"_id":ObjectId(id)},{"$set":input_transaction.model_dump()})
+    return {"message": "Transaction update successfully"}
+
+#delete transaction
+@app.delete("/transaction/{id}")
+def insert_transaction(id:str):
+
+    transaction.delete_one({"_id":ObjectId(id)})
+    return {"message": "Transaction delete successfully"}
